@@ -36,16 +36,26 @@ def run_portfolio_backtest(data_map: Dict[str, pd.DataFrame], cfg: PortfolioConf
             strat = strategys[sym]
             state = port.states[sym]
             ins = instruments[sym]
+            remaining_units = len(state.units)
             step = strat.step(row=row, state=state, equity=equity, dollar_per_point=ins.dollar_per_point, today=dt)
             for reason, size, price in step["fills"]:
                 allow = True
-                if reason in ("entry","add"):
+                if reason in ("entry", "add"):
                     if not port.can_open_new_unit(instruments, sym):
                         allow = False
+                        # remove the unit that strategy appended but we won't execute
+                        state.units = state.units[:-1]
                     else:
                         port._bump_units(instruments, sym, +1)
+                        remaining_units += 1
                 if allow:
                     port.execute(dt, sym, reason, size, price, row, ins)
+                    if reason == "stop":
+                        port._bump_units(instruments, sym, -1)
+                        remaining_units -= 1
+                    elif reason == "exit":
+                        port._bump_units(instruments, sym, -remaining_units)
+                        remaining_units = 0
 
         equity_series.append((dt, port.equity(last_prices)))
 
