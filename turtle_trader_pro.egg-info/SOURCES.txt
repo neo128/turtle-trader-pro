@@ -1,5 +1,8 @@
+LICENSE
 README.md
 pyproject.toml
+tests/test_portfolio.py
+tests/test_strategy.py
 turtle_trader_pro.egg-info/PKG-INFO
 turtle_trader_pro.egg-info/SOURCES.txt
 turtle_trader_pro.egg-info/dependency_links.txt

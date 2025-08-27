@@ -1,12 +1,18 @@
 from __future__ import annotations
 import pandas as pd
 from typing import Optional
+import time
+
 
 class DataSource:
-    def get_history(self, symbol: str, start: Optional[str], end: Optional[str], interval: str) -> pd.DataFrame:
+    def get_history(
+        self, symbol: str, start: Optional[str], end: Optional[str], interval: str
+    ) -> pd.DataFrame:
         raise NotImplementedError
+
     def recent_bars(self, symbol: str, n: int, interval: str) -> pd.DataFrame:
         raise NotImplementedError
+
 
 class YFinanceSource(DataSource):
     def __init__(self):
@@ -16,21 +22,77 @@ class YFinanceSource(DataSource):
             raise RuntimeError("需要安装 yfinance，请执行：pip install yfinance") from e
         self.yf = yf
 
-    def get_history(self, symbol: str, start: Optional[str], end: Optional[str], interval: str) -> pd.DataFrame:
+    def recent_bars(self, symbol: str, n: int, interval: str) -> pd.DataFrame:
+        period_map = {...}
+        period = period_map.get(interval, "max")
+        last_err = None
+        for _ in range(3):
+            try:
+                df = self.yf.download(
+                    symbol,
+                    period=period,
+                    interval=interval,
+                    auto_adjust=False,
+                    progress=False,
+                    threads=False,
+                )
+                if not df.empty:
+                    break
+            except Exception as e:
+                last_err = e
+            time.sleep(1.0)
+        if (df is None) or df.empty:
+            raise RuntimeError(
+                f"yfinance no data for {symbol} interval={interval}: {last_err}"
+            )
+
+    def get_history(
+        self, symbol: str, start: Optional[str], end: Optional[str], interval: str
+    ) -> pd.DataFrame:
         ticker = self.yf.Ticker(symbol)
         df = ticker.history(start=start, end=end, interval=interval, auto_adjust=False)
-        df = df.rename(columns={"Open":"open","High":"high","Low":"low","Close":"close","Volume":"volume"})
-        df = df.reset_index().rename(columns={"Date":"date"})
-        return df[["date","open","high","low","close","volume"]]
+        df = df.rename(
+            columns={
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Close": "close",
+                "Volume": "volume",
+            }
+        )
+        df = df.reset_index().rename(columns={"Date": "date"})
+        return df[["date", "open", "high", "low", "close", "volume"]]
 
     def recent_bars(self, symbol: str, n: int, interval: str) -> pd.DataFrame:
         # yfinance用period+interval拉最近数据
-        period_map = {"1m":"2d","2m":"5d","5m":"30d","15m":"60d","30m":"60d","60m":"730d","1h":"730d","1d":"max","1wk":"max","1mo":"max"}
+        period_map = {
+            "1m": "2d",
+            "2m": "5d",
+            "5m": "30d",
+            "15m": "60d",
+            "30m": "60d",
+            "60m": "730d",
+            "1h": "730d",
+            "1d": "max",
+            "1wk": "max",
+            "1mo": "max",
+        }
         period = period_map.get(interval, "max")
-        df = self.yf.download(symbol, period=period, interval=interval, auto_adjust=False, progress=False)
-        df = df.rename(columns={"Open":"open","High":"high","Low":"low","Close":"close","Volume":"volume"})
-        df = df.reset_index().rename(columns={df.columns[0]:"date"})
+        df = self.yf.download(
+            symbol, period=period, interval=interval, auto_adjust=False, progress=False
+        )
+        df = df.rename(
+            columns={
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Close": "close",
+                "Volume": "volume",
+            }
+        )
+        df = df.reset_index().rename(columns={df.columns[0]: "date"})
         return df.tail(n)
+
 
 class EFinanceSource(DataSource):
     def __init__(self):
@@ -40,12 +102,23 @@ class EFinanceSource(DataSource):
             raise RuntimeError("需要安装 efinance，请执行：pip install efinance") from e
         self.ef = ef
 
-    def get_history(self, symbol: str, start: Optional[str], end: Optional[str], interval: str) -> pd.DataFrame:
+    def get_history(
+        self, symbol: str, start: Optional[str], end: Optional[str], interval: str
+    ) -> pd.DataFrame:
         df = self.ef.stock.get_quote_history(symbol)
-        rename_map = {"日期":"date","开盘":"open","最高":"high","最低":"low","收盘":"close","成交量":"volume"}
+        rename_map = {
+            "日期": "date",
+            "开盘": "open",
+            "最高": "high",
+            "最低": "low",
+            "收盘": "close",
+            "成交量": "volume",
+        }
         df = df.rename(columns=rename_map)
         df["date"] = pd.to_datetime(df["date"])
-        cols = ["date","open","high","low","close"] + (["volume"] if "volume" in df.columns else [])
+        cols = ["date", "open", "high", "low", "close"] + (
+            ["volume"] if "volume" in df.columns else []
+        )
         return df[cols]
 
     def recent_bars(self, symbol: str, n: int, interval: str) -> pd.DataFrame:

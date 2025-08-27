@@ -1,0 +1,26 @@
+name: turtle-pro
+channels:
+  - conda-forge
+dependencies:
+  # —— Python & 基础科学计算 —— 
+  - python>=3.10,<3.12
+  - pip
+  - numpy>=1.24
+  - pandas>=2.0
+  - matplotlib>=3.7
+  - click>=8.0
+  - pyyaml>=6.0
+
+  # —— 可选：交易日历 —— 
+  - pandas-market-calendars>=4.4.0
+
+  # —— 开发便利（可留到 dev 环境也行）——
+  - pre-commit
+  - black
+  - flake8
+  - mypy
+  - pytest
+
+  # —— 用 pip 安装本地包 + extras（yahoo/efinance）——
+  - pip:
+      - -e .[yahoo,china]
