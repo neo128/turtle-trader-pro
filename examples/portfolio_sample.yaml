@@ -1,0 +1,29 @@
+account: { init_equity: 200000 }
+turtle:
+  risk_per_unit: 0.01
+  atr_len: 20
+  systems:
+    s1: { entry_lookback: 20, exit_lookback: 10, use_s1_filter: true }
+    s2: { entry_lookback: 55, exit_lookback: 20, use_s1_filter: false }
+  pyramiding: { step_N: 0.5, max_units: 4, stop_N: 2.0 }
+  market: { dollar_per_point: 1.0 }
+risk_caps:
+  max_units_total: 10
+  max_units_per_group: { equities: 6, a_shares: 6 }
+instruments:
+  - symbol: AAPL
+    source: yfinance
+    interval: 1d
+    start: 2018-01-01
+    end: 2025-08-01
+    group: equities
+    dollar_per_point: 1.0
+    rules: { allow_short: true, t_plus_one: false, limit_rate: 0.0 }
+  - symbol: "600519"
+    source: efinance
+    interval: 1d
+    start: 2018-01-01
+    end: 2025-08-01
+    group: a_shares
+    dollar_per_point: 1.0
+    rules: { allow_short: false, t_plus_one: true, limit_rate: 0.10 }

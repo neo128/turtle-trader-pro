@@ -1,0 +1,7 @@
+risk_per_unit: 0.01
+atr_len: 20
+systems:
+  s1: { entry_lookback: 20, exit_lookback: 10, use_s1_filter: true }
+  s2: { entry_lookback: 55, exit_lookback: 20, use_s1_filter: false }
+pyramiding: { step_N: 0.5, max_units: 4, stop_N: 2.0 }
+market: { dollar_per_point: 1.0, slippage_per_contract: 0.0, commission_per_contract: 0.0 }

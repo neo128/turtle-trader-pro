@@ -1,0 +1,39 @@
+Metadata-Version: 2.4
+Name: turtle-trader-pro
+Version: 0.6.0
+Summary: Portfolio Turtle Trading with A-share rules and portfolio-live (--use_closed).
+Author: ChatGPT
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: click>=8.0.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: matplotlib>=3.7.0
+Provides-Extra: yahoo
+Requires-Dist: yfinance>=0.2.40; extra == "yahoo"
+Provides-Extra: china
+Requires-Dist: efinance>=0.5.0; extra == "china"
+Provides-Extra: cal
+Requires-Dist: pandas_market_calendars>=4.4.0; extra == "cal"
+
+# Turtle Trader Pro (组合 + 实盘纸面)
+
+- 组合回测：多标的共享账户与风险配额  
+- A股规则（可配）：T+1、涨跌停、可卖空开关  
+- API 数据：yfinance（全球）、efinance（A股）  
+- 组合纸面实盘：`portfolio-live` 轮询多标的、执行到本地 Paper 账户（可持久化）  
+- `--use_closed`：只用已收盘的倒数第二根K线生成信号，避免半截K线造成的“假突破”
+
+## 安装
+```bash
+pip install -e .[yahoo,china]
+# 可选：交易日历（上交所/深交所/NYSE）
+pip install -e .[cal]
+
+
+
+
+
+
+
