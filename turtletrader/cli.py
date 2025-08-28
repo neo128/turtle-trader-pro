@@ -6,6 +6,7 @@ from .config import (TurtleConfig, SystemConfig, PyramidingConfig, MarketConfig,
 from .backtest import run_backtest
 from .data_sources import YFinanceSource, EFinanceSource
 from .portfolio_backtest import run_portfolio_backtest
+from .schema import PortfolioSchema
 
 def load_turtle_config(y: dict) -> TurtleConfig:
     s1 = y.get("systems", {}).get("s1")
@@ -22,6 +23,9 @@ def load_turtle_config(y: dict) -> TurtleConfig:
 def load_portfolio_config(path: str) -> PortfolioConfig:
     with open(path, "r") as f:
         y = yaml.safe_load(f)
+        validated = PortfolioSchema(**y)   # 若不合法会抛错
+        y = validated.model_dump()         # 之后按原逻辑转成 dataclass
+        
     turtle = load_turtle_config(y.get("turtle", y))
     risk_caps = y.get("risk_caps", {}) or {}
     prc = PortfolioRiskCaps(
@@ -80,7 +84,8 @@ def download(source, symbol, interval, start, end, out_csv):
 @click.option("--config", "config_path", required=True)
 @click.option("--out", "out_dir", default="./report_port")
 @click.option("--auto_download", is_flag=True)
-def portfolio_backtest_cmd(config_path, out_dir, auto_download):
+@click.option("--html_report", is_flag=True)
+def portfolio_backtest_cmd(config_path, out_dir, auto_download,html_report):
     pcfg = load_portfolio_config(config_path)
     data_map = {}
     for ins in pcfg.instruments:
@@ -96,6 +101,9 @@ def portfolio_backtest_cmd(config_path, out_dir, auto_download):
     for k in list(data_map.keys()):
         data_map[k] = unify_ohlcv(data_map[k])
     res = run_portfolio_backtest(data_map, pcfg, out_dir=out_dir)
+    if html_report:
+        from .report import save_html_report
+        save_html_report(res, out_dir)
     click.echo(json.dumps(res["metrics"], indent=2))
 
 @main.command("portfolio-live")
@@ -104,10 +112,12 @@ def portfolio_backtest_cmd(config_path, out_dir, auto_download):
 @click.option("--poll", default=60, help="轮询秒数")
 @click.option("--nbars", default=300, help="每次拉取的历史K线数量（>= ATR窗口×4）")
 @click.option("--use_closed", is_flag=True, help="只使用已收盘K线（倒数第二根）")
-def portfolio_live_cmd(config_path, paper_store, poll, nbars, use_closed):
+@click.option("--max_loops", default=0, help="最大迭代次数，0为无限循环")
+# @click.option("--html_report", is_flag=True)
+def portfolio_live_cmd(config_path, paper_store, poll, nbars, use_closed,max_loops):
     pcfg = load_portfolio_config(config_path)
     from .live_portfolio import run_portfolio_live
-    run_portfolio_live(pcfg, paper_store, poll=poll, nbars=nbars, use_closed=use_closed)
+    run_portfolio_live(pcfg, paper_store, poll=poll, nbars=nbars, use_closed=use_closed, max_loops=max_loops)
 
 if __name__ == "__main__":
     main()

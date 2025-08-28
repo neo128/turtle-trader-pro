@@ -6,19 +6,33 @@ from .portfolio import Portfolio, Position
 from .strategy import TurtleStrategy, TurtleState, Unit
 from .data_sources import YFinanceSource, EFinanceSource
 from .utils import unify_ohlcv
+from .cal import is_trading_day
+from .logging import get_logger
+
+log = get_logger("live")
+
+# 把 print(...) 改为 log.info / log.warning / log.error
+# 例如：
+# print(f"[restore] loaded state ...") -> log.info("restore: loaded state from %s", state_path)
+# print("Error:", e) -> log.exception("live loop error")
+
 
 def _pick_source(name: str):
     name = (name or "").lower()
-    if name in ["yf","yahoo","yfinance"]:
+    if name in ["yf", "yahoo", "yfinance"]:
         return YFinanceSource()
-    if name in ["ef","efinance","china","cn"]:
+    if name in ["ef", "efinance", "china", "cn"]:
         return EFinanceSource()
     raise ValueError(f"unknown source {name}")
 
+
 def _store_paths(store_dir: str):
     os.makedirs(store_dir, exist_ok=True)
-    return (os.path.join(store_dir, "state.json"),
-            os.path.join(store_dir, "trades.csv"))
+    return (
+        os.path.join(store_dir, "state.json"),
+        os.path.join(store_dir, "trades.csv"),
+    )
+
 
 def _serialize_state(port: Portfolio) -> dict:
     def ser_state(ts: TurtleState):
@@ -31,23 +45,32 @@ def _serialize_state(port: Portfolio) -> dict:
                     "direction": u.direction,
                     "size": u.size,
                     "stop": u.stop,
-                    "entry_date": str(u.entry_date)
-                } for u in ts.units
-            ]
+                    "entry_date": str(u.entry_date),
+                }
+                for u in ts.units
+            ],
         }
+
     return {
         "cash": port.cash,
-        "positions": {k: {"size": v.size, "avg_price": v.avg_price} for k, v in port.positions.items()},
+        "positions": {
+            k: {"size": v.size, "avg_price": v.avg_price}
+            for k, v in port.positions.items()
+        },
         "group_units": port.group_units,
         "total_units": port.total_units,
         "states": {k: ser_state(v) for k, v in port.states.items()},
         "trades": port.trades,
     }
 
+
 def _deserialize_state(port: Portfolio, data: dict):
     port.cash = float(data.get("cash", port.cash))
-    port.positions = {k: Position(size=int(v.get("size",0)), avg_price=float(v.get("avg_price",0))) for k,v in data.get("positions",{}).items()}
-    port.group_units = {k:int(v) for k,v in data.get("group_units",{}).items()}
+    port.positions = {
+        k: Position(size=int(v.get("size", 0)), avg_price=float(v.get("avg_price", 0)))
+        for k, v in data.get("positions", {}).items()
+    }
+    port.group_units = {k: int(v) for k, v in data.get("group_units", {}).items()}
     port.total_units = int(data.get("total_units", 0))
     new_states = {}
     for sym, sd in data.get("states", {}).items():
@@ -56,20 +79,30 @@ def _deserialize_state(port: Portfolio, data: dict):
         ts.last_breakout_price = sd.get("last_breakout_price", None)
         units = []
         for u in sd.get("units", []):
-            units.append(Unit(
-                entry_price=float(u["entry_price"]),
-                direction=int(u["direction"]),
-                size=int(u["size"]),
-                stop=float(u["stop"]),
-                entry_date=pd.to_datetime(u["entry_date"])
-            ))
+            units.append(
+                Unit(
+                    entry_price=float(u["entry_price"]),
+                    direction=int(u["direction"]),
+                    size=int(u["size"]),
+                    stop=float(u["stop"]),
+                    entry_date=pd.to_datetime(u["entry_date"]),
+                )
+            )
         ts.units = units
         new_states[sym] = ts
     if new_states:
         port.states = new_states
     port.trades = data.get("trades", [])
 
-def run_portfolio_live(pcfg: PortfolioConfig, store_dir: str, poll: int=60, nbars: int=300, use_closed: bool=False):
+
+def run_portfolio_live(
+    pcfg: PortfolioConfig,
+    store_dir: str,
+    poll: int = 60,
+    nbars: int = 300,
+    use_closed: bool = False,
+    max_loops: int = 0,
+):
     instruments = {ins.symbol: ins for ins in pcfg.instruments}
     strategys = {sym: TurtleStrategy(pcfg.turtle) for sym in instruments}
     sources = {sym: _pick_source(ins.source) for sym, ins in instruments.items()}
@@ -78,12 +111,15 @@ def run_portfolio_live(pcfg: PortfolioConfig, store_dir: str, poll: int=60, nbar
     state_path, trades_path = _store_paths(store_dir)
     if os.path.exists(state_path):
         try:
-            _deserialize_state(port, json.load(open(state_path,"r")))
+            _deserialize_state(port, json.load(open(state_path, "r")))
             print(f"[restore] loaded state from {state_path}")
         except Exception as e:
             print("restore error:", e)
 
-    print(f"[LIVE] portfolio {len(instruments)} symbols, poll={poll}s, nbars={nbars}, use_closed={use_closed}")
+    print(
+        f"[LIVE] portfolio {len(instruments)} symbols, poll={poll}s, nbars={nbars}, use_closed={use_closed}"
+    )
+    loops = 0
     while True:
         try:
             rows = {}
@@ -99,6 +135,12 @@ def run_portfolio_live(pcfg: PortfolioConfig, store_dir: str, poll: int=60, nbar
                 df["prev_close"] = df["close"].shift(1)
                 # 关键：仅用已收盘K线时取倒数第二根
                 row = df.iloc[-2] if (use_closed and len(df) >= 2) else df.iloc[-1]
+                if not is_trading_day(
+                    pd.to_datetime(row["date"]),
+                    market="SSE" if ins.source == "efinance" else "NYSE",
+                ):
+                    continue
+                # 注：日历代号：SSE/SZSE 需要你自定义 map（pandas-market-calendars 中常见是 XSHG / XSES / XNYS 等，实际以库支持为准）。
                 rows[sym] = row
                 last_prices[sym] = row["close"]
 
@@ -109,24 +151,41 @@ def run_portfolio_live(pcfg: PortfolioConfig, store_dir: str, poll: int=60, nbar
                 state = port.states.get(sym) or TurtleState()
                 port.states[sym] = state
                 ins = instruments[sym]
-                step = strat.step(row=row, state=state, equity=equity,
-                                  dollar_per_point=ins.dollar_per_point,
-                                  today=row["date"] if "date" in row else pd.Timestamp.utcnow())
+                step = strat.step(
+                    row=row,
+                    state=state,
+                    equity=equity,
+                    dollar_per_point=ins.dollar_per_point,
+                    today=row["date"] if "date" in row else pd.Timestamp.utcnow(),
+                )
                 for reason, size, price in step["fills"]:
                     allow = True
-                    if reason in ("entry","add"):
+                    if reason in ("entry", "add"):
                         if not port.can_open_new_unit(instruments, sym):
                             allow = False
                         else:
                             port._bump_units(instruments, sym, +1)
                     if allow:
-                        port.execute(pd.to_datetime(row["date"]), sym, reason, size, price, row, ins)
+                        port.execute(
+                            pd.to_datetime(row["date"]),
+                            sym,
+                            reason,
+                            size,
+                            price,
+                            row,
+                            ins,
+                        )
                         print(f"FILLED {sym}: {reason} {size} @ {price}")
 
             with open(state_path, "w") as f:
                 json.dump(_serialize_state(port), f, indent=2)
 
             time.sleep(poll)
+            loops += 1
+            if max_loops and loops >= max_loops:
+                log.info("max_loops reached: %s", max_loops)
+                break
+
         except KeyboardInterrupt:
             print("Stopped by user.")
             break

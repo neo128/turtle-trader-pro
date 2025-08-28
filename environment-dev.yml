@@ -1,0 +1,22 @@
+name: turtle-pro-dev
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10,<3.12
+  - pip
+  - numpy>=1.24
+  - pandas>=2.0
+  - matplotlib>=3.7
+  - click>=8.0
+  - pyyaml>=6.0
+  - pandas-market-calendars>=4.4.0
+
+  # —— 开发/质量 —— 
+  - pre-commit
+  - black
+  - flake8
+  - mypy
+  - pytest
+
+  - pip:
+      - -e .[yahoo,china]

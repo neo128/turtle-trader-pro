@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Dict, List
 
 @dataclass
@@ -31,8 +31,8 @@ class TurtleConfig:
     atr_len: int = 20
     s1: Optional[SystemConfig] = None
     s2: Optional[SystemConfig] = None
-    pyramiding: PyramidingConfig = PyramidingConfig()
-    market: MarketConfig = MarketConfig()
+    pyramiding: PyramidingConfig = field(default_factory=PyramidingConfig)
+    market: MarketConfig = field(default_factory=MarketConfig)
 
 @dataclass
 class InstrumentConfig:
@@ -44,16 +44,16 @@ class InstrumentConfig:
     end: Optional[str] = None
     interval: str = "1d"
     dollar_per_point: float = 1.0
-    rules: RuleConfig = RuleConfig()
+    rules: RuleConfig = field(default_factory=RuleConfig)
 
 @dataclass
 class PortfolioRiskCaps:
     max_units_total: int = 10
-    max_units_per_group: Dict[str, int] = None  # 例如 {"equities": 6, "a_shares": 6}
+    max_units_per_group: Optional[Dict[str, int]] = None  # 例如 {"equities": 6, "a_shares": 6}
 
 @dataclass
 class PortfolioConfig:
     account_init_equity: float = 100000.0
-    turtle: TurtleConfig = TurtleConfig()
-    instruments: List[InstrumentConfig] = None
-    risk_caps: PortfolioRiskCaps = PortfolioRiskCaps()
+    turtle: TurtleConfig = field(default_factory=TurtleConfig)
+    instruments: Optional[List[InstrumentConfig]] = None
+    risk_caps: PortfolioRiskCaps = field(default_factory=PortfolioRiskCaps)
